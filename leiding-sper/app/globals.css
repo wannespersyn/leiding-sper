@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: #f4f4fb;
+  --foreground: #15161f;
+  --surface: #ffffff;
+  --surface-foreground: #15161f;
+  --muted: #ececf7;
+  --muted-foreground: #666a80;
+  --border: #e2e3f0;
+  --accent: #4f46e5;
+  --accent-foreground: #ffffff;
+  --danger: #dc2626;
+  --radius-card: 1.25rem;
+  --radius-control: 999px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-foreground: var(--surface-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-danger: var(--danger);
+  --radius-card: var(--radius-card);
+  --radius-control: var(--radius-control);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #0d0e17;
+  --foreground: #f1f1f8;
+  --surface: #171827;
+  --surface-foreground: #f1f1f8;
+  --muted: #1f2033;
+  --muted-foreground: #9598b3;
+  --border: #2a2c44;
+  --accent: #6366f1;
+  --accent-foreground: #ffffff;
+  --danger: #ef4444;
+}
+
+/* Fallback for the brief window before the theme-init script runs (or if JS is disabled). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --background: #0d0e17;
+    --foreground: #f1f1f8;
+    --surface: #171827;
+    --surface-foreground: #f1f1f8;
+    --muted: #1f2033;
+    --muted-foreground: #9598b3;
+    --border: #2a2c44;
+    --accent: #6366f1;
+    --accent-foreground: #ffffff;
+    --danger: #ef4444;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+@supports (padding: max(0px)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
