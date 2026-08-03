@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git check-ignore *)",
+      "Bash(npx tsx *)",
+      "Bash(ps -p 63253 -o pid,command)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/login)",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(node -e \"require.resolve\\('playwright'\\)\")",
+      "Bash(npx --yes -p playwright@1.62.1 node /private/tmp/claude-501/-Users-persynwannes-Documents-Projects-leiding-sper/209093ae-9c75-4431-bb95-4c7919745558/scratchpad/shot.mjs)",
+      "Bash(npm install *)",
+      "Bash(echo \"exit: $?\")",
+      "Read(//tmp/**)",
+      "Bash(node shot.mjs)",
+      "Bash(curl -s http://localhost:3000/__nextjs_original-stack-frame)",
+      "Bash(node check-console-home.mjs)",
+      "Bash(npx --yes chromium-cli --help)",
+      "Bash(npm ls *)",
+      "Bash(mkdir -p /private/tmp/claude-501/-Users-persynwannes-Documents-Projects-leiding-sper/fd539ad5-4147-445e-aafc-bcc4eddee380/scratchpad/pw)",
+      "Bash(npm init *)",
+      "Bash(npx playwright *)",
+      "Bash(lsof -ti:3000 -sTCP:LISTEN)",
+      "Bash(xargs -r kill)"
+    ]
+  }
+}
