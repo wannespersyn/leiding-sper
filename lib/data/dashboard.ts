@@ -1,25 +1,31 @@
 import "server-only";
 import { eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { categories, entries, favorites, persons } from "@/db/schema";
+import { categories, entries, favorites, periods, persons } from "@/db/schema";
 
 export type CategorySummary = {
   id: string;
-  key: "bier" | "sterke";
+  key: "bier" | "cocktail";
   label: string;
-  streepjeWeight: number;
-  priceCents: number;
-  externExtraCents: number;
+  pointWeight: number;
+  priceLeidingCents: number;
+  priceExternCents: number;
+};
+
+export type CurrentPeriod = {
+  id: string;
+  name: string;
+  startedAt: Date;
 };
 
 export type PersonSummary = {
   id: string;
   name: string;
-  type: "leiding" | "extern" | "special";
+  type: "leiding" | "extern" | "scouts";
   isAdmin: boolean;
   bierCount: number;
-  sterkeCount: number;
-  totalStreepjes: number;
+  cocktailCount: number;
+  totalPoints: number;
   amountCents: number | null;
   isFavorite: boolean;
 };
@@ -28,12 +34,26 @@ export async function getCategories(): Promise<CategorySummary[]> {
   return db.select().from(categories).orderBy(categories.key);
 }
 
-export async function getDashboardData(
-  accountId: string,
-): Promise<{ people: PersonSummary[]; categories: CategorySummary[] }> {
+export async function getCurrentPeriod(): Promise<CurrentPeriod> {
+  const [period] = await db
+    .select()
+    .from(periods)
+    .where(isNull(periods.closedAt))
+    .limit(1);
+  if (!period) {
+    throw new Error("No open period - run the seed script first.");
+  }
+  return period;
+}
+
+export async function getDashboardData(accountId: string): Promise<{
+  people: PersonSummary[];
+  categories: CategorySummary[];
+  period: CurrentPeriod;
+}> {
   const cats = await getCategories();
+  const period = await getCurrentPeriod();
   const catById = new Map(cats.map((c) => [c.id, c]));
-  const catByKey = new Map(cats.map((c) => [c.key, c]));
 
   const allPersons = await db.select().from(persons).orderBy(persons.name);
 
@@ -44,7 +64,7 @@ export async function getDashboardData(
       count: sql<number>`count(*)::int`,
     })
     .from(entries)
-    .where(isNull(entries.settlementId))
+    .where(eq(entries.periodId, period.id))
     .groupBy(entries.personId, entries.categoryId);
 
   const favRows = await db
@@ -55,7 +75,7 @@ export async function getDashboardData(
 
   const countsByPerson = new Map<
     string,
-    { bierCount: number; sterkeCount: number; totalStreepjes: number; amountCents: number }
+    { bierCount: number; cocktailCount: number; totalPoints: number; amountCents: number }
   >();
 
   for (const row of openCounts) {
@@ -63,29 +83,29 @@ export async function getDashboardData(
     if (!category) continue;
     const current = countsByPerson.get(row.personId) ?? {
       bierCount: 0,
-      sterkeCount: 0,
-      totalStreepjes: 0,
+      cocktailCount: 0,
+      totalPoints: 0,
       amountCents: 0,
     };
     if (category.key === "bier") current.bierCount += row.count;
-    if (category.key === "sterke") current.sterkeCount += row.count;
-    current.totalStreepjes += row.count * category.streepjeWeight;
-    current.amountCents += row.count * category.priceCents;
+    if (category.key === "cocktail") current.cocktailCount += row.count;
+    current.totalPoints += row.count * category.pointWeight;
     countsByPerson.set(row.personId, current);
   }
 
   const people: PersonSummary[] = allPersons.map((person) => {
     const counts = countsByPerson.get(person.id);
     let amountCents: number | null = null;
-    if (person.type !== "special") {
-      amountCents = counts?.amountCents ?? 0;
-      if (person.type === "extern") {
-        const bierExtra =
-          (counts?.bierCount ?? 0) * (catByKey.get("bier")?.externExtraCents ?? 0);
-        const sterkeExtra =
-          (counts?.sterkeCount ?? 0) *
-          (catByKey.get("sterke")?.externExtraCents ?? 0);
-        amountCents += bierExtra + sterkeExtra;
+    if (person.type !== "scouts") {
+      amountCents = 0;
+      for (const row of openCounts.filter((r) => r.personId === person.id)) {
+        const category = catById.get(row.categoryId);
+        if (!category) continue;
+        const price =
+          person.type === "extern"
+            ? category.priceExternCents
+            : category.priceLeidingCents;
+        amountCents += row.count * price;
       }
     }
 
@@ -95,12 +115,54 @@ export async function getDashboardData(
       type: person.type,
       isAdmin: person.isAdmin,
       bierCount: counts?.bierCount ?? 0,
-      sterkeCount: counts?.sterkeCount ?? 0,
-      totalStreepjes: counts?.totalStreepjes ?? 0,
+      cocktailCount: counts?.cocktailCount ?? 0,
+      totalPoints: counts?.totalPoints ?? 0,
       amountCents,
       isFavorite: favSet.has(person.id),
     };
   });
 
-  return { people, categories: cats };
+  return { people, categories: cats, period };
+}
+
+export type DayBreakdownEntry = {
+  date: string;
+  points: number;
+  bierCount: number;
+  cocktailCount: number;
+};
+
+export async function getDayBreakdown(
+  periodId: string,
+): Promise<DayBreakdownEntry[]> {
+  const cats = await getCategories();
+  const catById = new Map(cats.map((c) => [c.id, c]));
+
+  const rows = await db
+    .select({
+      date: sql<string>`to_char(${entries.createdAt}, 'YYYY-MM-DD')`,
+      categoryId: entries.categoryId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(entries)
+    .where(eq(entries.periodId, periodId))
+    .groupBy(sql`to_char(${entries.createdAt}, 'YYYY-MM-DD')`, entries.categoryId);
+
+  const byDate = new Map<string, DayBreakdownEntry>();
+  for (const row of rows) {
+    const category = catById.get(row.categoryId);
+    if (!category) continue;
+    const current = byDate.get(row.date) ?? {
+      date: row.date,
+      points: 0,
+      bierCount: 0,
+      cocktailCount: 0,
+    };
+    current.points += row.count * category.pointWeight;
+    if (category.key === "bier") current.bierCount += row.count;
+    if (category.key === "cocktail") current.cocktailCount += row.count;
+    byDate.set(row.date, current);
+  }
+
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
 }

@@ -2,13 +2,13 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Leiding",
-    short_name: "Sper",
-    description: "Streepjes bijhouden voor leiding.",
+    name: "Staftracker",
+    short_name: "Staftracker",
+    description: "Streepjes bijhouden voor de leiding.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f4f4fb",
-    theme_color: "#4f46e5",
+    background_color: "#f5f6fa",
+    theme_color: "#19428b",
     icons: [
       {
         src: "/icons/icon-192.png",

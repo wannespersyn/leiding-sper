@@ -4,7 +4,7 @@ import { HomeClient } from "./HomeClient";
 
 export default async function HomePage() {
   const session = await requireSessionForPage();
-  const { people, categories } = await getDashboardData(session.accountId);
+  const { people } = await getDashboardData(session.accountId);
 
-  return <HomeClient people={people} categories={categories} session={session} />;
+  return <HomeClient people={people} session={session} />;
 }

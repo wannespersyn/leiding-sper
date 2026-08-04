@@ -12,10 +12,10 @@ import {
 export const personTypeEnum = pgEnum("person_type", [
   "leiding",
   "extern",
-  "special",
+  "scouts",
 ]);
 
-export const categoryKeyEnum = pgEnum("category_key", ["bier", "sterke"]);
+export const categoryKeyEnum = pgEnum("category_key", ["bier", "cocktail"]);
 
 export const persons = pgTable("persons", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -57,35 +57,34 @@ export const categories = pgTable("categories", {
   id: uuid("id").primaryKey().defaultRandom(),
   key: categoryKeyEnum("key").notNull().unique(),
   label: text("label").notNull(),
-  streepjeWeight: integer("streepje_weight").notNull(),
-  priceCents: integer("price_cents").notNull().default(0),
-  externExtraCents: integer("extern_extra_cents").notNull().default(0),
+  pointWeight: integer("point_weight").notNull(),
+  priceLeidingCents: integer("price_leiding_cents").notNull().default(0),
+  priceExternCents: integer("price_extern_cents").notNull().default(0),
 });
 
-export const settlements = pgTable("settlements", {
+export const periods = pgTable("periods", {
   id: uuid("id").primaryKey().defaultRandom(),
-  createdAt: timestamp("created_at", { withTimezone: true })
+  name: text("name").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-  createdByAccountId: uuid("created_by_account_id")
-    .notNull()
-    .references(() => accounts.id),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
 });
 
-export const settlementPrices = pgTable(
-  "settlement_prices",
+export const periodCategoryPrices = pgTable(
+  "period_category_prices",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    settlementId: uuid("settlement_id")
+    periodId: uuid("period_id")
       .notNull()
-      .references(() => settlements.id, { onDelete: "cascade" }),
+      .references(() => periods.id, { onDelete: "cascade" }),
     categoryId: uuid("category_id")
       .notNull()
       .references(() => categories.id),
-    priceCents: integer("price_cents").notNull(),
-    externExtraCents: integer("extern_extra_cents").notNull(),
+    priceLeidingCents: integer("price_leiding_cents").notNull(),
+    priceExternCents: integer("price_extern_cents").notNull(),
   },
-  (table) => [unique().on(table.settlementId, table.categoryId)],
+  (table) => [unique().on(table.periodId, table.categoryId)],
 );
 
 export const entries = pgTable("entries", {
@@ -96,14 +95,39 @@ export const entries = pgTable("entries", {
   categoryId: uuid("category_id")
     .notNull()
     .references(() => categories.id),
-  addedByAccountId: uuid("added_by_account_id")
+  periodId: uuid("period_id")
     .notNull()
-    .references(() => accounts.id),
+    .references(() => periods.id, { onDelete: "cascade" }),
+  // Nullable + set-null on delete: removing the adder's account (e.g. an
+  // admin removes that member later) must not block deleting entries this
+  // person logged for *other* people - it just loses the attribution.
+  addedByAccountId: uuid("added_by_account_id").references(() => accounts.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-  settlementId: uuid("settlement_id").references(() => settlements.id),
 });
+
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => persons.id, { onDelete: "cascade" }),
+    periodId: uuid("period_id")
+      .notNull()
+      .references(() => periods.id, { onDelete: "cascade" }),
+    markedPaidAt: timestamp("marked_paid_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    confirmedByAccountId: uuid("confirmed_by_account_id").references(
+      () => accounts.id,
+      { onDelete: "set null" },
+    ),
+  },
+  (table) => [unique().on(table.personId, table.periodId)],
+);
 
 export const favorites = pgTable(
   "favorites",

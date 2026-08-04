@@ -1,36 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Staftracker
 
-## Getting Started
+A PWA for tracking drink consumption points ("streepjes") for a scouting
+group's staff over multi-month periods. Built with Next.js 16 (App Router),
+Drizzle ORM + Postgres, and Tailwind 4.
 
-First, run the development server:
+See `docs/staftracker.md` for the original feature spec.
+
+## Getting started
 
 ```bash
+npm install
+cp .env.example .env   # fill in DATABASE_URL (Postgres, e.g. Supabase)
+npx drizzle-kit push   # create/update the schema
+npm run db:seed        # seed an initial roster, categories, and period
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 - you'll land on the PIN login screen using the
+roster from `drizzle/seed.ts` (edit that file with the real group before
+seeding a fresh database).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Layout
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `app/` - routes: Home (`/`), Overzicht (`/overzicht`), Profiel
+  (`/person/[id]`), Beheer (`/admin`, admin-only), member registration
+  (`/admin/add-member`, `/join?role=...`), and login (`/login`).
+- `app/actions/` - server actions (mutations).
+- `lib/data/` - read-side data layer (server-only).
+- `lib/auth/` - PIN hashing + cookie session handling.
+- `db/schema.ts` - Drizzle schema.
 
-## Learn More
+## Roles & auth
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Each person logs in with a name + 4-digit PIN. `isAdmin` gates the Beheer
+screens and member/period management actions. New members join either via
+an admin-added account or by scanning a QR code (`/admin` → QR-registratie)
+that lands on the public `/join?role=leiding|extern` self-registration form.

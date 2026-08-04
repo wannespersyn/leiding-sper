@@ -8,23 +8,23 @@ import { requireAdmin } from "@/lib/auth/session";
 
 export async function updateCategoryPrice(
   categoryId: string,
-  priceCents: number,
-  externExtraCents: number,
+  priceLeidingCents: number,
+  priceExternCents: number,
 ): Promise<void> {
   await requireAdmin();
 
   if (
-    !Number.isInteger(priceCents) ||
-    !Number.isInteger(externExtraCents) ||
-    priceCents < 0 ||
-    externExtraCents < 0
+    !Number.isInteger(priceLeidingCents) ||
+    !Number.isInteger(priceExternCents) ||
+    priceLeidingCents < 0 ||
+    priceExternCents < 0
   ) {
     throw new Error("Ongeldige prijs.");
   }
 
   await db
     .update(categories)
-    .set({ priceCents, externExtraCents })
+    .set({ priceLeidingCents, priceExternCents })
     .where(eq(categories.id, categoryId));
 
   revalidatePath("/");

@@ -1,19 +1,25 @@
 "use client";
 
-import { useMemo, useOptimistic, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { addEntry, undoEntry } from "./actions/entries";
 import { toggleFavorite } from "./actions/favorites";
 import { logoutAction } from "./actions/auth";
 import { PersonCard } from "@/components/PersonCard";
-import { AddEntrySheet } from "@/components/AddEntrySheet";
 import { BottomNav } from "@/components/BottomNav";
-import { IconLogout } from "@/components/icons";
-import type { CategorySummary, PersonSummary } from "@/lib/data/dashboard";
+import { AppHeader, HeaderButton, PageContent } from "@/components/AppHeader";
+import { IconLogout, IconSearch } from "@/components/icons";
+import { useToast } from "@/components/Toast";
+import type { PersonSummary } from "@/lib/data/dashboard";
 import type { SessionUser } from "@/lib/auth/session";
 
+// Category's for the points
+type CategoryKey = "bier" | "cocktail";
+
 type OptimisticAction =
-  | { type: "add"; personId: string; categoryKey: "bier" | "sterke"; sign: 1 | -1 }
+  | { type: "add"; personId: string; categoryKey: CategoryKey; sign: 1 | -1 }
   | { type: "favorite"; personId: string };
+
+const UNDO_WINDOW_MS = 4000;
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -24,25 +30,20 @@ function getGreeting() {
 
 export function HomeClient({
   people,
-  categories,
   session,
 }: Readonly<{
   people: PersonSummary[];
-  categories: CategorySummary[];
   session: SessionUser;
 }>) {
-  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-  const [lastAdded, setLastAdded] = useState<{
-    entryId: string;
-    personId: string;
-    categoryKey: "bier" | "sterke";
-  } | null>(null);
+  const { showToast } = useToast();
+  const [search, setSearch] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [lastAdded, setLastAdded] = useState<
+    Record<string, { entryId: string; categoryKey: CategoryKey }>
+  >({});
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  const catByKey = useMemo(
-    () => new Map(categories.map((c) => [c.key, c])),
-    [categories],
-  );
+  const sessionPerson = people.find((p) => p.id === session.personId);
 
   const [optimisticPeople, applyOptimistic] = useOptimistic(
     people,
@@ -51,50 +52,46 @@ export function HomeClient({
         if (p.id !== action.personId) return p;
         if (action.type === "favorite") return { ...p, isFavorite: !p.isFavorite };
 
-        const cat = catByKey.get(action.categoryKey);
-        if (!cat) return p;
         const sign = action.sign;
-        const extra = p.type === "extern" ? cat.externExtraCents : 0;
+        const weight = action.categoryKey === "bier" ? 1 : 2;
         return {
           ...p,
           bierCount: p.bierCount + (action.categoryKey === "bier" ? sign : 0),
-          sterkeCount: p.sterkeCount + (action.categoryKey === "sterke" ? sign : 0),
-          totalStreepjes: p.totalStreepjes + sign * cat.streepjeWeight,
-          amountCents:
-            p.amountCents === null
-              ? null
-              : p.amountCents + sign * (cat.priceCents + extra),
+          cocktailCount: p.cocktailCount + (action.categoryKey === "cocktail" ? sign : 0),
+          totalPoints: p.totalPoints + sign * weight,
+          amountCents: p.amountCents === null ? null : p.amountCents,
         };
       }),
   );
 
-  const selectedPerson =
-    optimisticPeople.find((p) => p.id === selectedPersonId) ?? null;
-  const favorites = optimisticPeople.filter((p) => p.isFavorite);
-  const rest = optimisticPeople.filter((p) => !p.isFavorite);
-
-  function closeSheet() {
-    setSelectedPersonId(null);
-    setLastAdded(null);
-  }
-
-  function handleAdd(categoryKey: "bier" | "sterke") {
-    if (!selectedPersonId) return;
-    const personId = selectedPersonId;
-    startTransition(async () => {
-      applyOptimistic({ type: "add", personId, categoryKey, sign: 1 });
-      const result = await addEntry(personId, categoryKey);
-      setLastAdded({ entryId: result.entryId, personId, categoryKey });
+  function clearUndo(personId: string) {
+    clearTimeout(timers.current[personId]);
+    setLastAdded((prev) => {
+      if (!(personId in prev)) return prev;
+      const next = { ...prev };
+      delete next[personId];
+      return next;
     });
   }
 
-  function handleUndo() {
-    if (!lastAdded) return;
-    const { entryId, personId, categoryKey } = lastAdded;
-    setLastAdded(null);
+  function handleAdd(personId: string, categoryKey: CategoryKey) {
     startTransition(async () => {
-      applyOptimistic({ type: "add", personId, categoryKey, sign: -1 });
-      await undoEntry(entryId);
+      applyOptimistic({ type: "add", personId, categoryKey, sign: 1 });
+      const result = await addEntry(personId, categoryKey);
+      setLastAdded((prev) => ({ ...prev, [personId]: { entryId: result.entryId, categoryKey } }));
+      clearTimeout(timers.current[personId]);
+      timers.current[personId] = setTimeout(() => clearUndo(personId), UNDO_WINDOW_MS);
+      showToast((categoryKey === "bier" ? "+1 Bier" : "+1 Cocktail") + " toegevoegd");
+    });
+  }
+
+  function handleUndo(personId: string) {
+    const entry = lastAdded[personId];
+    if (!entry) return;
+    clearUndo(personId);
+    startTransition(async () => {
+      applyOptimistic({ type: "add", personId, categoryKey: entry.categoryKey, sign: -1 });
+      await undoEntry(entry.entryId);
     });
   }
 
@@ -105,72 +102,82 @@ export function HomeClient({
     });
   }
 
+  const search_ = search.trim().toLowerCase();
+  const filtered = useMemo(
+    () => optimisticPeople.filter((p) => p.name.toLowerCase().includes(search_)),
+    [optimisticPeople, search_],
+  );
+  const favoritesList = filtered.filter((p) => p.isFavorite && p.id !== session.personId);
+  const rest = filtered.filter((p) => !p.isFavorite && p.id !== session.personId);
+
+  function renderCard(person: PersonSummary) {
+    return (
+      <PersonCard
+        key={person.id}
+        person={person}
+        showUndo={lastAdded[person.id] !== undefined}
+        disabled={isPending}
+        onAddBeer={() => handleAdd(person.id, "bier")}
+        onAddCocktail={() => handleAdd(person.id, "cocktail")}
+        onUndo={() => handleUndo(person.id)}
+        onToggleFavorite={() => handleToggleFavorite(person.id)}
+      />
+    );
+  }
+
   return (
     <div className="flex min-h-dvh flex-col bg-background">
-      <header className="flex items-center justify-between px-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-4">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">
-            {getGreeting()}, {session.name.split(" ")[0]}
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
+      <AppHeader
+        className="mb-4"
+        title={`${getGreeting()}, ${session.name.split(" ")[0]}`}
+        trailing={
+          <HeaderButton
+            label="Uitloggen"
             onClick={() => startTransition(() => logoutAction())}
-            aria-label="Uitloggen"
-            className="rounded-xl bg-surface p-2 text-muted-foreground active:opacity-60"
           >
             <IconLogout className="h-5 w-5" />
-          </button>
-        </div>
-      </header>
+          </HeaderButton>
+        }
+      />
 
-      <main className="flex-1 overflow-y-auto px-6 pb-6">
-        {favorites.length > 0 && (
+      <PageContent className="pb-3">
+        <div className="relative">
+          <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Zoek een naam..."
+            className="w-full rounded-xl border border-border bg-surface py-2.5 pl-10 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+      </PageContent>
+
+      <PageContent className="flex-1 overflow-y-auto pb-6">
+        <section className="mb-6">
+          <h2 className="mb-2 text-sm font-bold text-muted-foreground">Jezelf</h2>
+          <div className="rounded-2xl bg-surface px-4">{sessionPerson && renderCard(sessionPerson)}</div>
+        </section>
+
+        {favoritesList.length > 0 && (
           <section className="mb-6">
-            <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
-              Favorieten
-            </h2>
-            <div className="rounded-card bg-surface px-4">
-              {favorites.map((person) => (
-                <PersonCard
-                  key={person.id}
-                  person={person}
-                  onSelect={() => setSelectedPersonId(person.id)}
-                  onToggleFavorite={() => handleToggleFavorite(person.id)}
-                />
-              ))}
-            </div>
+            <h2 className="mb-2 text-sm font-bold text-muted-foreground">Favorieten</h2>
+            <div className="rounded-2xl bg-surface px-4">{favoritesList.map(renderCard)}</div>
           </section>
         )}
 
         <section>
-          <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
-            Iedereen
-          </h2>
-          <div className="rounded-card bg-surface px-4">
-            {rest.map((person) => (
-              <PersonCard
-                key={person.id}
-                person={person}
-                onSelect={() => setSelectedPersonId(person.id)}
-                onToggleFavorite={() => handleToggleFavorite(person.id)}
-              />
-            ))}
-          </div>
+          <h2 className="mb-2 text-sm font-bold text-muted-foreground">Iedereen</h2>
+          {rest.length > 0 ? (
+            <div className="rounded-2xl bg-surface px-4">{rest.map(renderCard)}</div>
+          ) : favoritesList.length === 0 ? (
+            <p className="rounded-2xl bg-surface p-6 text-center text-sm text-muted-foreground">
+              Geen leden gevonden voor &quot;{search}&quot;
+            </p>
+          ) : null}
         </section>
-      </main>
+      </PageContent>
 
       <BottomNav personId={session.personId} isAdmin={session.isAdmin} />
-
-      <AddEntrySheet
-        person={selectedPerson}
-        categories={categories}
-        isPending={isPending}
-        canUndo={lastAdded !== null && lastAdded.personId === selectedPersonId}
-        onAdd={handleAdd}
-        onUndo={handleUndo}
-        onClose={closeSheet}
-      />
     </div>
   );
 }

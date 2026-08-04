@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
+import { ToastProvider } from "@/components/Toast";
 import "./globals.css";
 
 const THEME_INIT_SCRIPT = `
@@ -28,12 +29,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Leiding Sper",
-  description: "Streepjes bijhouden voor leiding sper.",
+  title: "Staftracker",
+  description: "Streepjes bijhouden voor de leiding.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Sper",
+    title: "Staftracker",
   },
   icons: {
     apple: "/icons/apple-touch-icon.png",
@@ -46,8 +47,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f4f4fb" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d0e17" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f6fa" },
+    { media: "(prefers-color-scheme: dark)", color: "#05070c" },
   ],
 };
 
@@ -68,7 +69,7 @@ export default function RootLayout({
         </Script>
       </head>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

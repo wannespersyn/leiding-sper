@@ -2,24 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconHome, IconSettings, IconUser } from "./icons";
+import { IconChart, IconHome, IconSettings, IconUser } from "./icons";
 
 export function BottomNav({
   personId,
   isAdmin,
-}: {
+}: Readonly<{
   personId: string;
   isAdmin: boolean;
-}) {
+}>) {
   const pathname = usePathname();
 
   const items = [
-    { href: "/", label: "Overzicht", icon: IconHome, match: (p: string) => p === "/" },
+    { href: "/", label: "Home", icon: IconHome, match: (p: string) => p === "/" },
+    {
+      href: "/overzicht",
+      label: "Overzicht",
+      icon: IconChart,
+      match: (p: string) => p.startsWith("/overzicht"),
+    },
     {
       href: `/person/${personId}`,
       label: "Profiel",
       icon: IconUser,
-      match: (p: string) => p.startsWith("/person/"),
+      match: (p: string) => p === `/person/${personId}`,
     },
     ...(isAdmin
       ? [
@@ -42,7 +48,7 @@ export function BottomNav({
             key={href}
             href={href}
             className={`flex flex-col items-center gap-1 px-4 py-1 text-xs font-medium ${
-              active ? "text-accent" : "text-muted-foreground"
+              active ? "text-primary" : "text-muted-foreground"
             }`}
           >
             <Icon className="h-6 w-6" />
