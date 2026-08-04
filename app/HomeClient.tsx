@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useOptimistic, useRef, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useState, useTransition } from "react";
 import { addEntry, undoEntry } from "./actions/entries";
 import { toggleFavorite } from "./actions/favorites";
 import { logoutAction } from "./actions/auth";
@@ -41,7 +41,7 @@ export function HomeClient({
   const [lastAdded, setLastAdded] = useState<
     Record<string, { entryId: string; categoryKey: CategoryKey }>
   >({});
-  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const timers = useMemo(() => new Map<string, ReturnType<typeof setTimeout>>(), []);
 
   const sessionPerson = people.find((p) => p.id === session.personId);
 
@@ -65,7 +65,8 @@ export function HomeClient({
   );
 
   function clearUndo(personId: string) {
-    clearTimeout(timers.current[personId]);
+    const timer = timers.get(personId);
+    if (timer) clearTimeout(timer);
     setLastAdded((prev) => {
       if (!(personId in prev)) return prev;
       const next = { ...prev };
@@ -79,8 +80,9 @@ export function HomeClient({
       applyOptimistic({ type: "add", personId, categoryKey, sign: 1 });
       const result = await addEntry(personId, categoryKey);
       setLastAdded((prev) => ({ ...prev, [personId]: { entryId: result.entryId, categoryKey } }));
-      clearTimeout(timers.current[personId]);
-      timers.current[personId] = setTimeout(() => clearUndo(personId), UNDO_WINDOW_MS);
+      const existingTimer = timers.get(personId);
+      if (existingTimer) clearTimeout(existingTimer);
+      timers.set(personId, setTimeout(() => clearUndo(personId), UNDO_WINDOW_MS));
       showToast((categoryKey === "bier" ? "+1 Bier" : "+1 Cocktail") + " toegevoegd");
     });
   }
